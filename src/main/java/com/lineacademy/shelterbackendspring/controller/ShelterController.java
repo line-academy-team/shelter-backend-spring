@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -24,9 +25,9 @@ public class ShelterController {
             @RequestParam Double maxLat,
             @RequestParam Double minLng,
             @RequestParam Double maxLng,
-            @RequestParam(required = false) ShelterType type) {
+            @RequestParam(required = false) List<ShelterType> types) {
 
-        return shelterService.getSheltersInBounds(minLat, maxLat, minLng, maxLng, type)
+        return shelterService.getSheltersInBounds(minLat, maxLat, minLng, maxLng, types)
                 .map(ShelterResponse::from)
                 .collectList()
                 .map(list -> {

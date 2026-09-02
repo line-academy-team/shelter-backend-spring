@@ -10,6 +10,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.Collection;
+
 @Service
 @RequiredArgsConstructor
 public class ShelterService {
@@ -17,11 +19,13 @@ public class ShelterService {
     private final ShelterRepository shelterRepository;
 
     @Transactional(readOnly = true)
-    public Flux<Shelter> getSheltersInBounds(Double minLat, Double maxLat, Double minLng, Double maxLng, ShelterType type) {
-        return Mono.fromCallable(() -> shelterRepository.findWithinBounds(minLat, maxLat, minLng, maxLng, type))
+    public Flux<Shelter> getSheltersInBounds(Double minLat, Double maxLat, Double minLng, Double maxLng, Collection<ShelterType> types) {
+        return Mono.fromCallable(() -> {
+                    Collection<ShelterType> targetTypes = (types != null && !types.isEmpty()) ? types : null;
+                    return shelterRepository.findWithinBounds(minLat, maxLat, minLng, maxLng, targetTypes);
+                })
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMapMany(Flux::fromIterable);
-
     }
 
     @Transactional(readOnly = true)

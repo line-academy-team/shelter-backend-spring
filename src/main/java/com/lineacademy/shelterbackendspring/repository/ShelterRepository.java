@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface ShelterRepository extends JpaRepository<Shelter, Long> {
@@ -16,13 +17,13 @@ public interface ShelterRepository extends JpaRepository<Shelter, Long> {
                                        @Param("lng") Double lng);
 
     @Query("SELECT DISTINCT s FROM Shelter s " +
-           "LEFT JOIN s.shelterTypes t " +
-           "WHERE s.latitude BETWEEN :minLat AND :maxLat " +
-           "AND s.longitude BETWEEN :minLng AND :maxLng " +
-           "AND (:type IS NULL OR t = :type)")
+            "LEFT JOIN s.shelterTypes t " +
+            "WHERE s.latitude BETWEEN :minLat AND :maxLat " +
+            "AND s.longitude BETWEEN :minLng AND :maxLng " +
+            "AND (:types IS NULL OR t IN :types)")
     List<Shelter> findWithinBounds(@Param("minLat") Double minLat,
                                    @Param("maxLat") Double maxLat,
                                    @Param("minLng") Double minLng,
                                    @Param("maxLng") Double maxLng,
-                                   @Param("type")ShelterType type);
+                                   @Param("types") Collection<ShelterType> types);
 }
