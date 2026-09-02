@@ -1,6 +1,7 @@
 package com.lineacademy.shelterbackendspring.service;
 
-import tools.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lineacademy.shelterbackendspring.config.properties.PublicApiProperties;
 import com.lineacademy.shelterbackendspring.domain.entity.Shelter;
 import com.lineacademy.shelterbackendspring.domain.enums.ShelterType;
@@ -31,6 +32,7 @@ public class ShelterSyncService {
     private final CoordinateTransformUtil coordinateTransformUtil;
 
     private static final int PAGE_SIZE = 1000;
+    private final ObjectMapper objectMapper;
 
     /**
      * 4개 쉼터 API 전체 동기화 실행
@@ -100,10 +102,13 @@ public class ShelterSyncService {
                     }
 
                     return Flux.fromIterable(pageRanges)
-                            .flatMap(range -> fetchPage(serviceName, range[0], range[1]));
+                            .concatMap(range -> fetchPage(serviceName, range[0], range[1]));
                 });
     }
 
+    /**
+     * 문자열(String)로 응답 수신 후 ObjectMapper로 JsonNode 파싱
+     */
     private Mono<JsonNode> fetchPage(String serviceName, int startIdx, int endIdx) {
         String url = String.format("%s/%s/json/%s/%d/%d/",
                 publicApiProperties.getBaseUrl(),
@@ -116,7 +121,16 @@ public class ShelterSyncService {
         return seoulOpenApiWebClient.get()
                 .uri(url)
                 .retrieve()
-                .bodyToMono(JsonNode.class)
+                .bodyToMono(String.class)
+                .flatMap(responseBody -> {
+                    try {
+                        JsonNode jsonNode = objectMapper.readTree(responseBody);
+                        return Mono.just(jsonNode);
+                    } catch (Exception e) {
+                        log.error("[{}] JSON 파싱 오류: {}", serviceName, e.getMessage());
+                        return Mono.empty();
+                    }
+                })
                 .onErrorResume(e -> {
                     log.error("[{}] API 호출 실패 (범위: {}~{}): {}", serviceName, startIdx, endIdx, e.getMessage());
                     return Mono.empty();
@@ -145,24 +159,23 @@ public class ShelterSyncService {
 
     @Transactional
     public Mono<Shelter> saveOrUpdateShelter(Shelter newShelter) {
-        return Mono.fromCallable(() -> {
-            return shelterRepository.findByExternalIdAndShelterType(newShelter.getExternalId(), newShelter.getShelterType())
-                    .map(existing -> {
-                        existing.update(
-                                newShelter.getName(),
-                                newShelter.getFacilityType(),
-                                newShelter.getRoadAddress(),
-                                newShelter.getLotAddress(),
-                                newShelter.getLatitude(),
-                                newShelter.getLongitude(),
-                                newShelter.getCapacity(),
-                                newShelter.getOperatingHours(),
-                                newShelter.getRemark()
-                        );
-                        return shelterRepository.save(existing);
-                    })
-                    .orElseGet(() -> shelterRepository.save(newShelter));
-        }).subscribeOn(Schedulers.boundedElastic());
+        return Mono.fromCallable(() -> shelterRepository.findByExternalIdAndShelterType(newShelter.getExternalId(), newShelter.getShelterType())
+                        .map(existing -> {
+                            existing.update(
+                                    newShelter.getName(),
+                                    newShelter.getFacilityType(),
+                                    newShelter.getRoadAddress(),
+                                    newShelter.getLotAddress(),
+                                    newShelter.getLatitude(),
+                                    newShelter.getLongitude(),
+                                    newShelter.getCapacity(),
+                                    newShelter.getOperatingHours(),
+                                    newShelter.getRemark()
+                            );
+                            return shelterRepository.save(existing);
+                        })
+                        .orElseGet(() -> shelterRepository.save(newShelter)))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     // === 각 API별 파싱 로직 ===
@@ -170,7 +183,7 @@ public class ShelterSyncService {
     private Shelter parseHeatShelter(JsonNode row) {
         String name = row.path("R_AREA_NM").asText();
         String areaCd = row.path("AREA_CD").asText();
-        String externalId = areaCd + "_" + name; // 고유 ID 조합
+        String externalId = areaCd + "_" + name;
 
         double lat = row.path("LAT").asDouble(0.0);
         double lng = row.path("LON").asDouble(0.0);

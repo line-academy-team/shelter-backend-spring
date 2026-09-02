@@ -18,6 +18,6 @@ public class ShelterSyncRunner implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         log.info("서버 구동 완료: 공공데이터 동기화 작업을 시작합니다.");
         shelterSyncService.syncAllShelters()
-                .subscribe(); // Non-blocking 백그라운드 실행
+                .subscribe();
     }
 }
