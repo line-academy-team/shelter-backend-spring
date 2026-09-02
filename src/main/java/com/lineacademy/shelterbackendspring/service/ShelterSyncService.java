@@ -19,7 +19,9 @@ import reactor.core.scheduler.Schedulers;
 
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -66,7 +68,7 @@ public class ShelterSyncService {
                 .then();
     }
 
-    // 3. 기후동행 쉼터 (tbClicomCnt) - TM 좌표 변환 적용
+    // 3. 기후동행 쉼터 (tbClicomCnt)
     private Mono<Void> syncClimateShelters() {
         String serviceName = "tbClicomCnt";
         return fetchAllPages(serviceName)
@@ -74,7 +76,7 @@ public class ShelterSyncService {
                 .then();
     }
 
-    // 4. 미세먼지 쉼터 (shuntPlace) - TM 좌표 변환 적용
+    // 4. 미세먼지 쉼터 (shuntPlace)
     private Mono<Void> syncDustShelters() {
         String serviceName = "shuntPlace";
         return fetchAllPages(serviceName)
@@ -142,13 +144,13 @@ public class ShelterSyncService {
         if (!rows.isArray()) return Mono.empty();
 
         return Flux.fromIterable(rows)
-                .flatMap(row -> {
+                .concatMap(row -> {
                     try {
                         Shelter shelter = parser.parse(row);
                         if (shelter == null || shelter.getLatitude() == null || shelter.getLongitude() == null) {
                             return Mono.empty();
                         }
-                        return saveOrUpdateShelter(shelter);
+                        return saveOrMergeShelter(shelter, type);
                     } catch (Exception e) {
                         log.warn("[{}] 데이터 파싱 실패: {}", type, e.getMessage());
                         return Mono.empty();
@@ -158,27 +160,34 @@ public class ShelterSyncService {
     }
 
     @Transactional
-    public Mono<Shelter> saveOrUpdateShelter(Shelter newShelter) {
-        return Mono.fromCallable(() -> shelterRepository.findByExternalIdAndShelterType(newShelter.getExternalId(), newShelter.getShelterType())
-                        .map(existing -> {
-                            existing.update(
-                                    newShelter.getName(),
-                                    newShelter.getFacilityType(),
-                                    newShelter.getRoadAddress(),
-                                    newShelter.getLotAddress(),
-                                    newShelter.getLatitude(),
-                                    newShelter.getLongitude(),
-                                    newShelter.getCapacity(),
-                                    newShelter.getOperatingHours(),
-                                    newShelter.getRemark()
-                            );
-                            return shelterRepository.save(existing);
-                        })
-                        .orElseGet(() -> shelterRepository.save(newShelter)))
-                .subscribeOn(Schedulers.boundedElastic());
+    public Mono<Shelter> saveOrMergeShelter(Shelter newShelter, ShelterType currentType) {
+        return Mono.fromCallable(() -> {
+            List<Shelter> existingShelters = shelterRepository.findExistingShelters(
+                    newShelter.getName(),
+                    newShelter.getLatitude(),
+                    newShelter.getLongitude()
+            );
+
+            if (!existingShelters.isEmpty()) {
+                Shelter existing = existingShelters.get(0);
+                existing.addShelterType(currentType);
+                existing.updateInfo(
+                        newShelter.getFacilityType(),
+                        newShelter.getRoadAddress(),
+                        newShelter.getLotAddress(),
+                        newShelter.getCapacity(),
+                        newShelter.getOperatingHours(),
+                        newShelter.getRemark()
+                );
+                return shelterRepository.save(existing);
+            } else {
+                newShelter.addShelterType(currentType);
+                return shelterRepository.save(newShelter);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    // === 각 API별 파싱 로직 ===
+    // === 파싱 로직 ===
 
     private Shelter parseHeatShelter(JsonNode row) {
         String name = row.path("R_AREA_NM").asText();
@@ -196,7 +205,7 @@ public class ShelterSyncService {
         return Shelter.builder()
                 .externalId(externalId)
                 .name(name)
-                .shelterType(ShelterType.HEAT)
+                .shelterTypes(new HashSet<>(Set.of(ShelterType.HEAT)))
                 .facilityType(row.path("FACILITY_TYPE1").asText())
                 .roadAddress(StringUtils.hasText(roadAddr) ? roadAddr : lotAddr)
                 .lotAddress(lotAddr)
@@ -221,7 +230,7 @@ public class ShelterSyncService {
         return Shelter.builder()
                 .externalId(externalId)
                 .name(name)
-                .shelterType(ShelterType.COLD)
+                .shelterTypes(new HashSet<>(Set.of(ShelterType.COLD)))
                 .facilityType(row.path("FACILITY_TYPE1").asText())
                 .roadAddress(StringUtils.hasText(roadAddr) ? roadAddr : lotAddr)
                 .lotAddress(lotAddr)
@@ -245,7 +254,7 @@ public class ShelterSyncService {
         return Shelter.builder()
                 .externalId(externalId)
                 .name(name)
-                .shelterType(ShelterType.CLIMATE)
+                .shelterTypes(new HashSet<>(Set.of(ShelterType.CLIMATE)))
                 .facilityType(row.path("CNT_GB").asText())
                 .roadAddress(row.path("ROAD_NM_ADDR").asText())
                 .latitude(wgs84[0])
@@ -267,7 +276,7 @@ public class ShelterSyncService {
         return Shelter.builder()
                 .externalId(externalId)
                 .name(name)
-                .shelterType(ShelterType.DUST)
+                .shelterTypes(new HashSet<>(Set.of(ShelterType.DUST)))
                 .facilityType(row.path("FCLT_TYPE").asText())
                 .roadAddress(row.path("ADDR").asText())
                 .latitude(wgs84[0])
