@@ -37,6 +37,7 @@ public class SecurityConfig {
                         // 인증 없이 접근 가능한 엔드포인트
                         .pathMatchers(HttpMethod.POST, "/auth/login", "/auth/signup").permitAll()
                         .pathMatchers(HttpMethod.GET, "/shelters", "/shelters/**").permitAll()
+                        .pathMatchers("/bookmarks", "/bookmarks/**").authenticated()
                         // 나머지는 인증 필요
                         .anyExchange().authenticated()
                 )
