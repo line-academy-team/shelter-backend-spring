@@ -94,4 +94,17 @@ public class BookmarkController {
                     return Mono.just(ResponseEntity.badRequest().body(errorResponse));
                 });
     }
+    @GetMapping("/check/{shelterId}")
+        public Mono<ResponseEntity<Map<String, Object>>> checkBookmark(
+                @AuthenticationPrincipal String email,
+                @PathVariable Long shelterId) {
+
+            return bookmarkService.isBookmarked(email, shelterId)
+                    .map(isBookmarked -> {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("success", true);
+                        response.put("data", isBookmarked);
+                        return ResponseEntity.ok(response);
+                    });
+        }
 }

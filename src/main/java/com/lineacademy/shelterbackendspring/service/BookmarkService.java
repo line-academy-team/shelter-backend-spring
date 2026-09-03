@@ -90,4 +90,12 @@ public class BookmarkService {
             bookmarkRepository.delete(bookmark);
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
+     @Transactional(readOnly = true)
+        public Mono<Boolean> isBookmarked(String email, Long shelterId) {
+            return Mono.fromCallable(() -> {
+                User user = userRepository.findByEmail(email)
+                        .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
+                return bookmarkRepository.existsByUserIdAndShelterId(user.getId(), shelterId);
+            }).subscribeOn(Schedulers.boundedElastic());
+        }
 }
