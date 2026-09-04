@@ -1,6 +1,7 @@
 package com.lineacademy.shelterbackendspring.config;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -21,7 +22,8 @@ import java.util.List;
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
-
+    @Value("${cors.allowed-origins}")
+    private String[] allowedOrigins;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Bean
@@ -80,9 +82,7 @@ public class SecurityConfig {
         CorsConfiguration configuration =
                 new CorsConfiguration();
 
-        configuration.setAllowedOrigins(
-                List.of("http://localhost:8081")
-        );
+        configuration.setAllowedOrigins(List.of(allowedOrigins));
 
         configuration.setAllowedMethods(
                 Arrays.asList(
